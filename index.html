@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dividend Analyzer</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    canvas { margin-top: 20px; }
+    label { margin-right: 10px; }
+  </style>
+</head>
+<body>
+  <h2>📈 Dividend Growth Analyzer</h2>
+
+  <input type="file" id="fileInput" />
+  <br><br>
+  <label>Select Model:</label>
+  <select id="modelSelect">
+    <option value="reinvest">Reinvestment Only</option>
+    <option value="yield">Yield Growth Only</option>
+    <option value="compound">Full Compounding</option>
+  </select>
+
+  <br><br>
+  <label>Investment ($): <input type="number" id="investmentInput" value="100000" /></label>
+  <label>Years: <input type="number" id="yearsInput" value="10" /></label>
+  <br><br>
+  <button onclick="analyze()">Analyze</button>
+
+  <div id="output"></div>
+  <canvas id="chartCanvas" width="1000" height="400"></canvas>
+
+  <script>
+    let dividendChart;
+
+    function analyze() {
+      const file = document.getElementById('fileInput').files[0];
+      const model = document.getElementById('modelSelect').value;
+      const investment = parseFloat(document.getElementById('investmentInput').value);
+      const years = parseInt(document.getElementById('yearsInput').value);
+      if (!file || isNaN(investment) || isNaN(years)) {
+        alert('Upload a file and enter valid inputs.');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet);
+
+        const results = [];
+
+        json.forEach(row => {
+          const name = row["Name"];
+          const ticker = row["Ticker"];
+          const divYield = parseFloat(row["Div Yield"]);
+          const cagr = parseFloat(row["3Y DIV CAGR"]);
+
+          if (isNaN(divYield) || isNaN(cagr)) return;
+
+          let currentInvestment = investment;
+          let totalDividends = 0;
+          const yearlyDividends = [];
+
+          for (let y = 1; y <= years; y++) {
+            let currentYield;
+
+            if (model === "reinvest") {
+              currentYield = divYield; // fixed yield
+            } else if (model === "yield") {
+              currentYield = divYield * Math.pow(1 + cagr / 100, y - 1); // growing yield
+            } else if (model === "compound") {
+              currentYield = divYield * Math.pow(1 + cagr / 100, y - 1); // growing yield
+            }
+
+            const annualDividend = currentInvestment * currentYield / 100;
+            yearlyDividends.push(annualDividend.toFixed(2));
+            totalDividends += annualDividend;
+
+            if (model === "reinvest" || model === "compound") {
+              currentInvestment += annualDividend; // reinvest
+            }
+          }
+
+          results.push({ name, ticker, totalDividends, yearlyDividends });
+        });
+
+        const top = results
+          .sort((a, b) => b.totalDividends - a.totalDividends)
+          .slice(0, 10);
+
+        displayResults(top, years);
+      };
+
+      reader.readAsArrayBuffer(file);
+    }
+
+    function displayResults(stocks, years) {
+      const output = document.getElementById('output');
+      output.innerHTML = "<h3>Top 10 Stocks by Total Dividends</h3>";
+
+      const table = document.createElement("table");
+      table.border = 1;
+      const header = document.createElement("tr");
+      header.innerHTML = "<th>Ticker</th><th>Total Dividends</th>" +
+        Array.from({ length: years }, (_, i) => `<th>Year ${i + 1}</th>`).join("");
+      table.appendChild(header);
+
+      const labels = [];
+      const datasets = [];
+
+      stocks.forEach(stock => {
+        const row = document.createElement("tr");
+        row.innerHTML = `<td>${stock.ticker}</td><td>${parseFloat(stock.totalDividends).toFixed(2)}</td>` +
+          stock.yearlyDividends.map(d => `<td>${d}</td>`).join("");
+        table.appendChild(row);
+
+        labels.push(stock.ticker);
+        datasets.push({
+          label: stock.ticker,
+          data: stock.yearlyDividends.map(Number),
+          fill: false,
+          borderColor: getRandomColor(),
+          tension: 0.2
+        });
+      });
+
+      output.appendChild(table);
+
+      const ctx = document.getElementById('chartCanvas').getContext('2d');
+      if (dividendChart) dividendChart.destroy();
+      dividendChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: Array.from({ length: years }, (_, i) => `Year ${i + 1}`),
+          datasets
+        },
+        options: {
+          plugins: {
+            title: {
+              display: true,
+              text: "Yearly Dividends by Stock"
+            }
+          },
+          scales: {
+            y: {
+              title: { display: true, text: 'Dividend ($)' },
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+
+    function getRandomColor() {
+      return `hsl(${Math.random() * 360}, 70%, 60%)`;
+    }
+  </script>
+</body>
+</html>
