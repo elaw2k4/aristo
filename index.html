@@ -26,6 +26,8 @@
   <br><br>
   <label>Investment ($): <input type="number" id="investmentInput" value="100000" /></label>
   <label>Years: <input type="number" id="yearsInput" value="10" /></label>
+  <label>Top Stocks:
+  <input type="number" id="topCountInput" value="10" min="1" max="50" /></label>
   <br><br>
   <button onclick="analyze()">Analyze</button>
 
@@ -89,9 +91,11 @@
           results.push({ name, ticker, totalDividends, yearlyDividends });
         });
 
+        const topCount = parseInt(document.getElementById('topCountInput').value) || 10;
+
         const top = results
           .sort((a, b) => b.totalDividends - a.totalDividends)
-          .slice(0, 10);
+          .slice(0, topCount);
 
         displayResults(top, years);
       };
